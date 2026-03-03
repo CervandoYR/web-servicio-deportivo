@@ -1,0 +1,358 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── MULTI-TENANT CORE ──────────────────────────────────────────────────────
+
+model Academy {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  logo         String?
+  primaryColor String   @default("#3B82F6")
+  address      String?
+  phone        String?
+  email        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  users            User[]
+  students         Student[]
+  trainers         Trainer[]
+  groups           Group[]
+  leads            Lead[]
+  payments         Payment[]
+  campaigns        Campaign[]
+  landingSections  LandingSection[]
+  landingMedia     LandingMedia[]
+  attendances      Attendance[]
+
+  @@map("academies")
+}
+
+// ─── AUTH ────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(cuid())
+  academyId    String
+  email        String
+  password     String
+  name         String
+  role         UserRole  @default(TRAINER)
+  refreshToken String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  academy      Academy   @relation(fields: [academyId], references: [id], onDelete: Cascade)
+  trainerId    String?   @unique
+  trainer      Trainer?  @relation(fields: [trainerId], references: [id])
+
+  @@unique([academyId, email])
+  @@map("users")
+}
+
+enum UserRole {
+  SUPERADMIN
+  ADMIN
+  TRAINER
+}
+
+// ─── STUDENTS ────────────────────────────────────────────────────────────────
+
+model Student {
+  id          String        @id @default(cuid())
+  academyId   String
+  firstName   String
+  lastName    String
+  birthDate   DateTime
+  parentName  String?
+  parentPhone String?
+  parentEmail String?
+  status      StudentStatus @default(ACTIVE)
+  photo       String?
+  notes       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  academy     Academy       @relation(fields: [academyId], references: [id], onDelete: Cascade)
+  groups      StudentGroup[]
+  payments    Payment[]
+  attendances Attendance[]
+
+  @@map("students")
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+// ─── TRAINERS ────────────────────────────────────────────────────────────────
+
+model Trainer {
+  id        String   @id @default(cuid())
+  academyId String
+  name      String
+  phone     String?
+  email     String?
+  specialty String?
+  bio       String?
+  photo     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  academy   Academy  @relation(fields: [academyId], references: [id], onDelete: Cascade)
+  groups    Group[]
+  user      User?
+
+  @@map("trainers")
+}
+
+// ─── GROUPS ──────────────────────────────────────────────────────────────────
+
+model Group {
+  id           String      @id @default(cuid())
+  academyId    String
+  trainerId    String?
+  name         String
+  sportType    String
+  minAge       Int?
+  maxAge       Int?
+  capacity     Int         @default(20)
+  monthlyPrice Decimal     @default(0) @db.Decimal(10, 2)
+  schedule     String?
+  status       GroupStatus @default(ACTIVE)
+  description  String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  academy     Academy       @relation(fields: [academyId], references: [id], onDelete: Cascade)
+  trainer     Trainer?      @relation(fields: [trainerId], references: [id])
+  students    StudentGroup[]
+  schedules   Schedule[]
+  attendances Attendance[]
+
+  @@map("groups")
+}
+
+enum GroupStatus {
+  ACTIVE
+  INACTIVE
+  FULL
+}
+
+model StudentGroup {
+  id        String    @id @default(cuid())
+  studentId String
+  groupId   String
+  startDate DateTime  @default(now())
+  endDate   DateTime?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  group     Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, groupId, startDate])
+  @@map("student_groups")
+}
+
+// ─── SCHEDULES ───────────────────────────────────────────────────────────────
+
+model Schedule {
+  id        String   @id @default(cuid())
+  groupId   String
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  createdAt DateTime @default(now())
+
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@map("schedules")
+}
+
+// ─── ATTENDANCE ───────────────────────────────────────────────────────────────
+
+model Attendance {
+  id         String           @id @default(cuid())
+  academyId  String
+  studentId  String
+  groupId    String
+  date       DateTime         @db.Date
+  status     AttendanceStatus @default(PRESENT)
+  notes      String?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  academy    Academy          @relation(fields: [academyId], references: [id], onDelete: Cascade)
+  student    Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  group      Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, groupId, date])
+  @@map("attendances")
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  JUSTIFIED
+}
+
+// ─── PAYMENTS ────────────────────────────────────────────────────────────────
+
+model Payment {
+  id        String        @id @default(cuid())
+  academyId String
+  studentId String
+  groupId   String?
+  month     Int
+  year      Int
+  amount    Decimal       @db.Decimal(10, 2)
+  status    PaymentStatus @default(PENDING)
+  method    String?
+  dueDate   DateTime
+  paidAt    DateTime?
+  notes     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  academy   Academy       @relation(fields: [academyId], references: [id], onDelete: Cascade)
+  student   Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, groupId, month, year])
+  @@map("payments")
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+// ─── LEADS ───────────────────────────────────────────────────────────────────
+
+model Lead {
+  id              String     @id @default(cuid())
+  academyId       String
+  name            String
+  parentName      String?
+  phone           String
+  email           String?
+  childAge      Int?
+  sportInterest String?
+  source        String?
+  status        LeadStatus @default(NEW)
+  notes         String?
+  convertedAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  academy         Academy    @relation(fields: [academyId], references: [id], onDelete: Cascade)
+
+  @@map("leads")
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  CONVERTED
+  LOST
+}
+
+// ─── CAMPAIGNS ───────────────────────────────────────────────────────────────
+
+model Campaign {
+  id             String         @id @default(cuid())
+  academyId      String
+  name           String
+  type           CampaignType
+  targetSegment  String
+  subject        String?
+  body           String
+  scheduledAt    DateTime?
+  sentAt         DateTime?
+  status         CampaignStatus @default(DRAFT)
+  recipientCount Int?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  academy        Academy        @relation(fields: [academyId], references: [id], onDelete: Cascade)
+  logs           CampaignLog[]
+
+  @@map("campaigns")
+}
+
+enum CampaignType {
+  EMAIL
+  WHATSAPP
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  FAILED
+}
+
+model CampaignLog {
+  id          String   @id @default(cuid())
+  campaignId  String
+  recipientId String
+  type        String
+  status      String
+  sentAt      DateTime @default(now())
+  error       String?
+
+  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@map("campaign_logs")
+}
+
+// ─── LANDING CMS ──────────────────────────────────────────────────────────────
+
+model LandingSection {
+  id        String   @id @default(cuid())
+  academyId String
+  type      String   // hero | programs | schedules | trainers | testimonials | gallery | cta | footer
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  content   Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  academy   Academy       @relation(fields: [academyId], references: [id], onDelete: Cascade)
+  media     LandingMedia[]
+
+  @@index([academyId])
+  @@map("landing_sections")
+}
+
+model LandingMedia {
+  id        String   @id @default(cuid())
+  academyId String
+  sectionId String?
+  url       String
+  key       String?
+  altText   String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  academy   Academy         @relation(fields: [academyId], references: [id], onDelete: Cascade)
+  section   LandingSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+
+  @@index([academyId])
+  @@index([sectionId])
+  @@map("landing_media")
+}

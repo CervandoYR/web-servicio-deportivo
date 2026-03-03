@@ -1,0 +1,24 @@
+{
+  "name": "academia-deportiva",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "npm run dev --workspace=server",
+    "dev:client": "npm run dev --workspace=client",
+    "build": "npm run build --workspace=client",
+    "db:generate": "npx prisma generate --schema=./prisma/schema.prisma",
+    "db:migrate": "npx prisma migrate dev --schema=./prisma/schema.prisma",
+    "db:push": "npx prisma db push --schema=./prisma/schema.prisma",
+    "db:studio": "npx prisma studio --schema=./prisma/schema.prisma",
+    "db:seed": "npx ts-node prisma/seed.ts"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
